@@ -1,0 +1,64 @@
+# Action 파일 제목
+name: Spring Boot Maven CI/CD
+
+# 어디에 올릴 건지
+on:
+  push:
+    branches:
+      - main  # 띄어쓰기 수정
+  # 수동으로 Action 실행할 수 있게 해주는 옵션
+  workflow_dispatch:
+
+# 진행할 내용 
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+   
+    steps:
+      # 코드를 가상 머신으로 복사
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # JDK 설정 (이름과 버전 일치시킴)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Maven Build
+      - name: Build JAR with Maven
+        run: mvn clean package -DskipTests
+
+      # JAR 파일을 복사해서 퍼블릭 서버로 전달
+      # Maven은 기본적으로 target 폴더에 생성됩니다.
+      - name: Copy JAR to Public Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PUBLIC_HOST }}
+          username: root
+          key: ${{ secrets.PRIVATE_SSH_KEY }}
+          source: "target/*.jar" # Maven 경로인 target/으로 수정
+          target: /root/app/
+          strip_components: 1 # target 폴더 제외하고 파일만 전송
+          
+      # deploy 스크립트 파일을 퍼블릭 서버로 전달
+      - name: Copy deploy script to Public Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PUBLIC_HOST }}
+          username: root
+          key: ${{ secrets.PRIVATE_SSH_KEY }}
+          source: "deploy_private.sh"
+          target: /root/app/
+
+      # 퍼블릭 서버에서 스크립트 실행
+      - name: Execute deploy_private.sh on Public Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PUBLIC_HOST }}
+          username: root
+          key: ${{ secrets.PRIVATE_SSH_KEY }}
+          script: |
+            chmod +x /root/app/deploy_private.sh
+            /root/app/deploy_private.sh
